@@ -1,0 +1,81 @@
+item_id,item_name,category,criticality,lead_time_days,normal_daily_use,peak_daily_demand,baseline_reorder_level,recommended_reorder_level_for_peak,stock_end_of_24_May_baseline,days_of_cover_at_peak_start
+I074,Drug-eluting stent,Medical Supplies,A,3,3,12,18,34,4,0.8
+I078,Pressure transducer kit,Medical Supplies,B,3,4,16,24,42,6,0.86
+I044,Insulin regular vial,Pharmaceuticals,A,2,8,47,40,131,46,0.98
+I030,Chest drain kit,Medical Supplies,A,2,3,16,15,44,19,1.19
+I004,Ringer's lactate 1L bag,Medical Supplies,A,2,90,449,450,1492,548,1.22
+I006,Instant cooling pack,Medical Supplies,B,2,60,330,300,1042,408,1.24
+I031,Nasogastric tube,Medical Supplies,B,2,8,48,40,128,50,1.25
+I042,Amoxicillin-clavulanate IV,Pharmaceuticals,B,2,50,259,250,813,348,1.34
+I048,Enoxaparin prefilled syringe,Pharmaceuticals,A,2,20,104,100,317,139,1.34
+I009,Adhesive tape roll,Medical Supplies,C,2,70,354,350,1164,462,1.38
+I013,Nebulizer kit,Medical Supplies,B,2,40,206,200,625,287,1.39
+I051,Salbutamol nebule,Pharmaceuticals,A,2,60,304,300,949,427,1.4
+I007,Sterile gauze pack,Medical Supplies,B,2,250,1270,1250,4284,1803,1.42
+I001,IV cannula 20G,Medical Supplies,B,2,120,600,600,1959,866,1.44
+I002,IV cannula 18G,Medical Supplies,B,2,80,438,400,1347,584,1.44
+I010,Sterile wound dressing,Medical Supplies,B,2,120,608,600,1973,876,1.44
+I045,Amlodipine tablet,Pharmaceuticals,B,2,100,491,500,1613,711,1.45
+I014,Oxygen mask adult,Medical Supplies,A,2,45,221,225,727,308,1.46
+I050,Adrenaline injection,Pharmaceuticals,A,2,25,138,125,436,186,1.46
+I052,Hydrocortisone injection,Pharmaceuticals,B,2,30,148,150,464,195,1.47
+I054,Silver sulfadiazine cream,Pharmaceuticals,B,2,15,74,75,245,111,1.5
+I070,Guiding catheter,Medical Supplies,A,3,3,10,18,33,15,1.5
+I053,Loperamide capsule,Pharmaceuticals,C,2,60,306,300,978,429,1.51
+I008,Elastic bandage,Medical Supplies,C,2,80,394,400,1323,574,1.51
+I038,Diclofenac injection,Pharmaceuticals,B,2,50,252,250,795,381,1.51
+I011,Disposable syringe 10 mL,Medical Supplies,B,2,220,1071,1100,3582,1548,1.52
+I005,Oral rehydration salts sachet,Medical Supplies,B,2,200,998,1000,3339,1461,1.53
+I003,Sodium chloride 0.9% 1L bag,Medical Supplies,A,2,150,714,750,2414,1089,1.53
+I046,Aspirin 81 mg tablet,Pharmaceuticals,B,2,120,564,600,1854,868,1.54
+I063,Rapid influenza test,Laboratory,B,4,20,73,140,363,111,1.54
+I012,Arm splint,Medical Supplies,B,2,25,123,125,408,184,1.55
+I036,Paracetamol IV 100 mL,Pharmaceuticals,B,2,60,291,300,995,438,1.56
+I035,Paracetamol 500 mg tablet,Pharmaceuticals,B,2,200,929,1000,3122,1455,1.58
+I064,Kidney function reagent,Laboratory,B,4,80,355,560,1490,571,1.61
+I056,Serum separator tube,Laboratory,B,4,100,437,700,1910,692,1.62
+I037,Ibuprofen 400 mg tablet,Pharmaceuticals,B,2,150,723,750,2329,1105,1.63
+I032,Heat-moisture exchange filter,Medical Supplies,B,2,15,70,75,213,115,1.64
+I029,Arterial line kit,Medical Supplies,B,2,5,25,25,67,41,1.64
+I028,Central venous catheter kit,Medical Supplies,A,2,6,29,30,78,48,1.66
+I041,Ceftriaxone 1 g injection,Pharmaceuticals,A,2,80,362,400,1197,601,1.66
+I058,Blood culture bottle,Laboratory,A,4,25,118,175,468,180,1.7
+I059,Glucose test strip,Laboratory,B,4,150,646,1050,2767,1096,1.71
+I049,Nitroglycerin sublingual,Pharmaceuticals,A,2,12,64,60,209,110,1.72
+I055,EDTA blood tube,Laboratory,B,4,120,562,840,2343,968,1.72
+I040,Omeprazole IV,Pharmaceuticals,B,2,40,229,200,642,295,1.73
+I017,Foley catheter 16F,Medical Supplies,B,2,20,90,100,299,157,1.74
+I026,Ventilator circuit,Medical Supplies,A,2,6,26,30,77,42,1.75
+I065,CT contrast media 100 mL,Medical Supplies,B,2,12,52,60,169,92,1.77
+I023,Pressure-relief dressing,Medical Supplies,C,2,20,83,100,266,149,1.8
+I039,Ondansetron injection,Pharmaceuticals,B,2,40,199,200,629,306,1.81
+I047,Heparin injection,Pharmaceuticals,A,2,15,79,75,250,129,1.82
+I024,Alcohol swab,Medical Supplies,C,2,300,1191,1500,3980,2267,1.9
+I015,IV administration set,Medical Supplies,B,2,90,345,450,1145,669,1.94
+I061,Troponin cartridge,Laboratory,A,4,20,88,140,384,148,1.95
+I033,ECG electrode,Medical Supplies,B,2,60,256,300,844,463,1.95
+I057,Citrate coagulation tube,Laboratory,B,4,30,131,210,544,211,1.95
+I060,Urinalysis dipstick,Laboratory,B,4,60,257,420,1112,503,1.96
+I022,Nasal cannula,Medical Supplies,B,2,40,159,200,517,302,1.96
+I027,Closed suction catheter,Medical Supplies,B,2,20,89,100,289,176,1.98
+I018,Urine drainage bag,Medical Supplies,B,2,25,96,125,326,189,1.99
+I025,Endotracheal tube 7.5 mm,Medical Supplies,A,2,8,38,40,109,76,2.0
+I019,Examination gloves,Medical Supplies,C,2,400,1564,2000,5281,3090,2.01
+I020,Sterile gloves,Medical Supplies,B,2,100,365,500,1204,749,2.05
+I067,X-ray cassette cover,Medical Supplies,C,2,30,117,150,385,235,2.06
+I016,IV extension set,Medical Supplies,B,2,70,287,350,898,517,2.08
+I034,Saline flush 10 mL,Medical Supplies,B,2,80,338,400,1082,633,2.08
+I043,Metronidazole IV,Pharmaceuticals,B,2,40,199,200,600,342,2.15
+I021,Surgical face mask,Medical Supplies,B,2,150,608,750,1970,1341,2.32
+I076,Vascular closure device,Medical Supplies,B,3,3,14,18,43,26,2.36
+I062,Blood gas cartridge,Laboratory,A,4,25,112,175,449,212,2.41
+I075,Contrast media 100 mL (cath lab),Medical Supplies,B,3,8,24,48,98,68,2.83
+I069,Diagnostic catheter,Medical Supplies,B,3,5,15,30,57,38,2.92
+I080,Hemostasis valve (Y-connector),Medical Supplies,B,3,4,12,24,44,35,2.92
+I077,Manifold kit,Medical Supplies,B,3,4,13,24,47,30,3.0
+I071,Coronary guidewire 0.014,Medical Supplies,A,3,4,11,24,40,33,3.0
+I068,Introducer sheath 6F,Medical Supplies,A,3,5,20,30,55,46,3.07
+I066,Ultrasound gel bottle,Medical Supplies,C,2,5,26,25,55,42,4.2
+I079,Radial compression band,Medical Supplies,B,3,5,12,30,49,49,4.9
+I072,Guidewire 0.035,Medical Supplies,B,3,5,15,30,56,46,5.11
+I073,PTCA balloon,Medical Supplies,A,3,3,7,18,28,29,9.67

@@ -1,0 +1,3 @@
+policy,fill_rate,stockout_item_days,items_with_a_stockout,critical_items_with_a_stockout,first_stockout_date
+Baseline planning,0.9419,75,51,14,2026-05-25
+Surge-aware planning,1.0,0,0,0,none

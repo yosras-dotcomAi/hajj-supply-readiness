@@ -1,0 +1,81 @@
+item_id,item_name,category,unit,criticality,supply_channel,lead_time_days,normal_daily_use,consuming_departments
+I001,IV cannula 20G,Medical Supplies,piece,B,Standard,2,120,"Emergency, Trauma ICU, Burn Unit"
+I002,IV cannula 18G,Medical Supplies,piece,B,Standard,2,80,"Emergency, Trauma ICU, Burn Unit"
+I003,Sodium chloride 0.9% 1L bag,Medical Supplies,bag,A,Standard,2,150,"Emergency, Trauma ICU, Burn Unit"
+I004,Ringer's lactate 1L bag,Medical Supplies,bag,A,Standard,2,90,"Emergency, Trauma ICU, Burn Unit"
+I005,Oral rehydration salts sachet,Medical Supplies,sachet,B,Standard,2,200,"Emergency, Trauma ICU, Burn Unit"
+I006,Instant cooling pack,Medical Supplies,piece,B,Standard,2,60,"Emergency, Trauma ICU, Burn Unit"
+I007,Sterile gauze pack,Medical Supplies,pack,B,Standard,2,250,"Emergency, Trauma ICU, Burn Unit"
+I008,Elastic bandage,Medical Supplies,roll,C,Standard,2,80,"Emergency, Trauma ICU, Burn Unit"
+I009,Adhesive tape roll,Medical Supplies,roll,C,Standard,2,70,"Emergency, Trauma ICU, Burn Unit"
+I010,Sterile wound dressing,Medical Supplies,piece,B,Standard,2,120,"Emergency, Trauma ICU, Burn Unit"
+I011,Disposable syringe 10 mL,Medical Supplies,piece,B,Standard,2,220,"Emergency, Trauma ICU, Burn Unit"
+I012,Arm splint,Medical Supplies,piece,B,Standard,2,25,"Emergency, Trauma ICU, Burn Unit"
+I013,Nebulizer kit,Medical Supplies,kit,B,Standard,2,40,"Emergency, Trauma ICU, Burn Unit"
+I014,Oxygen mask adult,Medical Supplies,piece,A,Standard,2,45,"Emergency, Trauma ICU, Burn Unit"
+I015,IV administration set,Medical Supplies,set,B,Standard,2,90,Inpatient Wards
+I016,IV extension set,Medical Supplies,set,B,Standard,2,70,Inpatient Wards
+I017,Foley catheter 16F,Medical Supplies,piece,B,Standard,2,20,Inpatient Wards
+I018,Urine drainage bag,Medical Supplies,piece,B,Standard,2,25,Inpatient Wards
+I019,Examination gloves,Medical Supplies,pair,C,Standard,2,400,Inpatient Wards
+I020,Sterile gloves,Medical Supplies,pair,B,Standard,2,100,Inpatient Wards
+I021,Surgical face mask,Medical Supplies,piece,B,Standard,2,150,Inpatient Wards
+I022,Nasal cannula,Medical Supplies,piece,B,Standard,2,40,Inpatient Wards
+I023,Pressure-relief dressing,Medical Supplies,piece,C,Standard,2,20,Inpatient Wards
+I024,Alcohol swab,Medical Supplies,piece,C,Standard,2,300,Inpatient Wards
+I025,Endotracheal tube 7.5 mm,Medical Supplies,piece,A,Standard,2,8,"ICU, Trauma ICU, Burn Unit"
+I026,Ventilator circuit,Medical Supplies,set,A,Standard,2,6,"ICU, Trauma ICU, Burn Unit"
+I027,Closed suction catheter,Medical Supplies,piece,B,Standard,2,20,"ICU, Trauma ICU, Burn Unit"
+I028,Central venous catheter kit,Medical Supplies,kit,A,Standard,2,6,"ICU, Trauma ICU, Burn Unit"
+I029,Arterial line kit,Medical Supplies,kit,B,Standard,2,5,"ICU, Trauma ICU, Burn Unit"
+I030,Chest drain kit,Medical Supplies,kit,A,Standard,2,3,"ICU, Trauma ICU, Burn Unit"
+I031,Nasogastric tube,Medical Supplies,piece,B,Standard,2,8,"ICU, Trauma ICU, Burn Unit"
+I032,Heat-moisture exchange filter,Medical Supplies,piece,B,Standard,2,15,"ICU, Trauma ICU, Burn Unit"
+I033,ECG electrode,Medical Supplies,piece,B,Standard,2,60,"ICU, Trauma ICU, Burn Unit"
+I034,Saline flush 10 mL,Medical Supplies,piece,B,Standard,2,80,"ICU, Trauma ICU, Burn Unit"
+I035,Paracetamol 500 mg tablet,Pharmaceuticals,tablet,B,Standard,2,200,Pharmacy
+I036,Paracetamol IV 100 mL,Pharmaceuticals,bag,B,Standard,2,60,Pharmacy
+I037,Ibuprofen 400 mg tablet,Pharmaceuticals,tablet,B,Standard,2,150,Pharmacy
+I038,Diclofenac injection,Pharmaceuticals,ampoule,B,Standard,2,50,Pharmacy
+I039,Ondansetron injection,Pharmaceuticals,ampoule,B,Standard,2,40,Pharmacy
+I040,Omeprazole IV,Pharmaceuticals,vial,B,Standard,2,40,Pharmacy
+I041,Ceftriaxone 1 g injection,Pharmaceuticals,vial,A,Standard,2,80,Pharmacy
+I042,Amoxicillin-clavulanate IV,Pharmaceuticals,vial,B,Standard,2,50,Pharmacy
+I043,Metronidazole IV,Pharmaceuticals,bag,B,Standard,2,40,Pharmacy
+I044,Insulin regular vial,Pharmaceuticals,vial,A,Standard,2,8,Pharmacy
+I045,Amlodipine tablet,Pharmaceuticals,tablet,B,Standard,2,100,Pharmacy
+I046,Aspirin 81 mg tablet,Pharmaceuticals,tablet,B,Standard,2,120,Pharmacy
+I047,Heparin injection,Pharmaceuticals,vial,A,Standard,2,15,Pharmacy
+I048,Enoxaparin prefilled syringe,Pharmaceuticals,syringe,A,Standard,2,20,Pharmacy
+I049,Nitroglycerin sublingual,Pharmaceuticals,dose,A,Standard,2,12,Pharmacy
+I050,Adrenaline injection,Pharmaceuticals,ampoule,A,Standard,2,25,Pharmacy
+I051,Salbutamol nebule,Pharmaceuticals,nebule,A,Standard,2,60,Pharmacy
+I052,Hydrocortisone injection,Pharmaceuticals,vial,B,Standard,2,30,Pharmacy
+I053,Loperamide capsule,Pharmaceuticals,capsule,C,Standard,2,60,Pharmacy
+I054,Silver sulfadiazine cream,Pharmaceuticals,tube,B,Standard,2,15,Pharmacy
+I055,EDTA blood tube,Laboratory,tube,B,FOC (ministry supply),4,120,Laboratory
+I056,Serum separator tube,Laboratory,tube,B,FOC (ministry supply),4,100,Laboratory
+I057,Citrate coagulation tube,Laboratory,tube,B,FOC (ministry supply),4,30,Laboratory
+I058,Blood culture bottle,Laboratory,bottle,A,FOC (ministry supply),4,25,Laboratory
+I059,Glucose test strip,Laboratory,strip,B,FOC (ministry supply),4,150,Laboratory
+I060,Urinalysis dipstick,Laboratory,strip,B,FOC (ministry supply),4,60,Laboratory
+I061,Troponin cartridge,Laboratory,cartridge,A,FOC (ministry supply),4,20,Laboratory
+I062,Blood gas cartridge,Laboratory,cartridge,A,FOC (ministry supply),4,25,Laboratory
+I063,Rapid influenza test,Laboratory,test,B,FOC (ministry supply),4,20,Laboratory
+I064,Kidney function reagent,Laboratory,test,B,FOC (ministry supply),4,80,Laboratory
+I065,CT contrast media 100 mL,Medical Supplies,vial,B,Standard,2,12,Radiology
+I066,Ultrasound gel bottle,Medical Supplies,bottle,C,Standard,2,5,Radiology
+I067,X-ray cassette cover,Medical Supplies,piece,C,Standard,2,30,Radiology
+I068,Introducer sheath 6F,Medical Supplies,piece,A,Standard,3,5,Cath Lab
+I069,Diagnostic catheter,Medical Supplies,piece,B,Standard,3,5,Cath Lab
+I070,Guiding catheter,Medical Supplies,piece,A,Standard,3,3,Cath Lab
+I071,Coronary guidewire 0.014,Medical Supplies,piece,A,Standard,3,4,Cath Lab
+I072,Guidewire 0.035,Medical Supplies,piece,B,Standard,3,5,Cath Lab
+I073,PTCA balloon,Medical Supplies,piece,A,Standard,3,3,Cath Lab
+I074,Drug-eluting stent,Medical Supplies,piece,A,Standard,3,3,Cath Lab
+I075,Contrast media 100 mL (cath lab),Medical Supplies,vial,B,Standard,3,8,Cath Lab
+I076,Vascular closure device,Medical Supplies,piece,B,Standard,3,3,Cath Lab
+I077,Manifold kit,Medical Supplies,kit,B,Standard,3,4,Cath Lab
+I078,Pressure transducer kit,Medical Supplies,kit,B,Standard,3,4,Cath Lab
+I079,Radial compression band,Medical Supplies,piece,B,Standard,3,5,Cath Lab
+I080,Hemostasis valve (Y-connector),Medical Supplies,piece,B,Standard,3,4,Cath Lab

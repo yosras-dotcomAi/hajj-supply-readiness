@@ -1,0 +1,10 @@
+department,surge_sensitivity
+Emergency,1.0
+Trauma ICU,1.0
+Burn Unit,0.8
+ICU,0.6
+Inpatient Wards,0.7
+Pharmacy,0.9
+Laboratory,0.8
+Radiology,0.7
+Cath Lab,0.4
