@@ -5,8 +5,9 @@
 
 | | |
 |---|---|
-| **Live dashboard** | [Open the Streamlit app](STREAMLIT-LINK) |
-| **Project slides** | [View the presentation](docs/Hajj_Supply_Readiness_Slides.pptx) |
+| **Live dashboard** | https://hajj-supply-readiness-mufms7udbkasahbxamdeyh.streamlit.app/
+| **Project slides** | [Hajj_Supply_Readiness_Slides.pptx](https://github.com/user-attachments/files/34555773/Hajj_Supply_Readiness_Slides.pptx)
+
 
 ## Objective
 
