@@ -1,10 +1,9 @@
 """
-Hajj Season Medical Supply Readiness: interactive dashboard.
+Access-site infection after cardiac catheterisation: STEMI vs elective PCI
+Interactive Streamlit dashboard.
 
-A FICTIONAL field hospital in Mina during Hajj 1447 / 2026. Every number is an
-assumption used to demonstrate the method. No real hospital, patient or supply data.
-
-Run:  streamlit run app.py   (CSV files sit in the repository root)
+All data are SIMULATED (see generate_data.py). No real patient or hospital data.
+Run:  streamlit run app.py
 """
 from pathlib import Path
 
@@ -12,303 +11,431 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from scipy import stats
 
-from supply_engine import what_if
+# ------------------------------------------------------------------ setup
+st.set_page_config(page_title="Cath Lab Access-Site Infection", page_icon="🫀", layout="wide")
 
-st.set_page_config(page_title="Hajj Supply Readiness", page_icon="🕋", layout="wide")
-
-ROOT = Path(__file__).parent
-TEAL, RED, AMBER, BLUE, GREY, LIGHT = "#2a9d8f", "#d1495b", "#F2B84B", "#3B8FD9", "#7F93A8", "#80C8FF"
-A, B = "Baseline planning", "Surge-aware planning"
-POLICY_COLOR = {A: RED, B: TEAL}
-CRIT_COLOR = {"A": RED, "B": AMBER, "C": GREY}
+DATA = Path(__file__).parent / "data"
+BLUE, LIGHT, AMBER, RED, GREY, GREEN = "#3B8FD9", "#80C8FF", "#F2B84B", "#E5636D", "#7F93A8", "#4CB782"
+CASE_ORDER = ["Elective", "NSTEMI", "STEMI"]
+CASE_COLOR = {"Elective": LIGHT, "NSTEMI": AMBER, "STEMI": RED}
+OUTCOMES = {"Suspected infection": "suspected_infection_30d", "Confirmed infection": "confirmed_infection_30d"}
 
 st.markdown(
     """
 <style>
 .block-container{padding-top:1.4rem;max-width:1280px}
-.hero h1{font-size:2.0rem;margin:0 0 .2rem 0;color:#fff}
-.hero p{color:#9FB6CF;margin:0 0 .8rem 0;font-size:1.02rem}
-.sim{background:#33280c;border:1px solid #B7791F;color:#F5D58B;border-radius:8px;padding:9px 14px;font-size:.92rem;margin-bottom:1rem}
+.hero h1{font-size:2.0rem;margin:0 0 .2rem 0;color:inherit}
+.hero p{color:inherit;opacity:.75;margin:0 0 .8rem 0;font-size:1.02rem}
+.sim{background:#16263d;border:1px solid #2F4A6D;border-left:4px solid #F2B84B;color:#E6EEF7;border-radius:8px;padding:10px 14px;font-size:.92rem;margin-bottom:1rem}
 .kpi{background:#121C2E;border:1px solid #1F3250;border-radius:12px;padding:14px 16px;height:100%}
-.kpi .v{font-size:1.75rem;font-weight:700;color:#fff;line-height:1.15}
-.kpi .l{color:#9FB6CF;font-size:.85rem;margin-top:2px}
+.kpi .v{font-size:1.85rem;font-weight:700;color:#fff;line-height:1.15}
+.kpi .l{color:#C9DCF0;font-size:.85rem;margin-top:2px}
 .kpi .s{color:#6F8CAB;font-size:.76rem;margin-top:2px}
-.answer{background:#0F2238;border-left:4px solid #2a9d8f;border-radius:8px;padding:14px 18px;margin:.6rem 0 1rem 0}
+.answer{background:#0F2238;border-left:4px solid #3B8FD9;border-radius:8px;padding:14px 18px;margin:.6rem 0 1rem 0;color:#E6EEF7}
 .answer h4{margin:0 0 .4rem 0;color:#fff}
-.note{color:#8DA3BA;font-size:.85rem}
+.answer b{color:#fff}
+.answer .note{color:#9FB6CF}
+.note{color:#7F93A8;font-size:.85rem}
 </style>
 """,
     unsafe_allow_html=True,
 )
 
 
+# ------------------------------------------------------------------ statistics
+def exact_ci(k, n, alpha=0.05):
+    """Exact (Clopper-Pearson) CI for a proportion, returned per 1,000."""
+    if n == 0:
+        return np.nan, np.nan
+    lo = 0.0 if k == 0 else stats.beta.ppf(alpha / 2, k, n - k + 1)
+    hi = 1.0 if k == n else stats.beta.ppf(1 - alpha / 2, k + 1, n - k)
+    return lo * 1000, hi * 1000
+
+
+def rate_row(k, n):
+    lo, hi = exact_ci(k, n)
+    return {"n": int(n), "events": int(k), "rate": (k / n * 1000) if n else np.nan, "lo": lo, "hi": hi}
+
+
+def rate_by(df, col, outcome, order=None):
+    rows = []
+    for level, g in df.groupby(col, observed=True):
+        rows.append({"group": level, **rate_row(g[outcome].sum(), len(g))})
+    out = pd.DataFrame(rows)
+    if order is not None and not out.empty:
+        out["group"] = pd.Categorical(out["group"], order, ordered=True)
+        out = out.sort_values("group")
+    return out
+
+
+def rate_ratio(a, n1, b, n2):
+    """Rate (risk) ratio a/n1 vs b/n2 with 95% log-method CI and Fisher exact p."""
+    p = stats.fisher_exact([[a, n1 - a], [b, n2 - b]])[1]
+    if a == 0 or b == 0:
+        return np.nan, np.nan, np.nan, p
+    rr = (a / n1) / (b / n2)
+    se = np.sqrt(1 / a - 1 / n1 + 1 / b - 1 / n2)
+    return rr, np.exp(np.log(rr) - 1.96 * se), np.exp(np.log(rr) + 1.96 * se), p
+
+
+def fmt_rate(r):
+    return f"{r['rate']:.1f} ({r['lo']:.1f} to {r['hi']:.1f})"
+
+
+# ------------------------------------------------------------------ data
 @st.cache_data
 def load():
-    items = pd.read_csv(ROOT / "items.csv")
-    dept = pd.read_csv(ROOT / "departments.csv")
-    mult = pd.read_csv(ROOT / "daily_multipliers.csv", parse_dates=["date"])
-    cons = pd.read_csv(ROOT / "daily_consumption.csv", parse_dates=["date"])
-    sim = pd.read_csv(ROOT / "stock_simulation.csv", parse_dates=["date"]).merge(
-        items[["item_id", "item_name", "category", "criticality", "lead_time_days", "normal_daily_use"]], on="item_id")
-    mc = pd.read_csv(ROOT / "monte_carlo_summary.csv").set_index("policy")
-    kpi = pd.read_csv(ROOT / "kpi_summary.csv").set_index("policy")
-    rec = pd.read_csv(ROOT / "reorder_recommendations.csv")
-    return items, dept, mult, cons, sim, mc, kpi, rec
+    proc = pd.read_csv(DATA / "procedures.csv", parse_dates=["procedure_date"])
+    ops = pd.read_csv(DATA / "operators.csv")
+    ev = pd.read_csv(DATA / "infection_events.csv")
+    proc = proc.merge(ops, on="operator_id", how="left")
+    proc["month"] = proc["procedure_date"].dt.to_period("M").dt.to_timestamp()
+    proc["timing"] = np.where(proc["out_of_hours"] == 1, "Out of hours", "In hours")
+    return proc, ev
 
 
-items, dept, mult, cons, sim, mc, kpi, rec = load()
+proc_all, events_all = load()
 
 
-def kpi_card(col, value, label, sub=""):
+def kpi(col, value, label, sub=""):
     col.markdown(f'<div class="kpi"><div class="v">{value}</div><div class="l">{label}</div><div class="s">{sub}</div></div>', unsafe_allow_html=True)
 
 
 def style(fig, h=380, legend=True):
-    fig.update_layout(template="plotly_dark", height=h, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                      margin=dict(l=10, r=10, t=40, b=10), showlegend=legend, font=dict(size=13),
-                      legend=dict(orientation="h", y=1.12, x=0))
-    fig.update_xaxes(gridcolor="#1F2B3F", zeroline=False)
-    fig.update_yaxes(gridcolor="#1F2B3F", zeroline=False)
+    fig.update_layout(
+        height=h, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=10, r=10, t=50, b=70 if legend else 10), showlegend=legend, font=dict(size=13),
+        legend=dict(orientation="h", y=-0.18, x=0, yanchor="top"),
+    )
+    fig.update_xaxes(gridcolor="rgba(127,127,127,0.25)", zeroline=False)
+    fig.update_yaxes(gridcolor="rgba(127,127,127,0.25)", zeroline=False)
     return fig
 
 
-def day_label(d):
-    return pd.Timestamp(d).strftime("%d %b")
+def err_bar(fig, df, **kw):
+    fig.add_trace(go.Bar(
+        x=df["group"], y=df["rate"], error_y=dict(type="data", symmetric=False, array=df["hi"] - df["rate"], arrayminus=df["rate"] - df["lo"], color="#8DA3BA"),
+        text=[f"{v:.1f}" for v in df["rate"]], textposition="outside", cliponaxis=False, **kw))
+    return fig
 
-
-date_labels = [day_label(d) for d in mult["date"]]
-PEAK = mult["multiplier"] >= 5
 
 # ------------------------------------------------------------------ sidebar
-st.sidebar.markdown("## Filters")
-cat_sel = st.sidebar.multiselect("Item category", sorted(items.category.unique()), default=sorted(items.category.unique()))
-crit_sel = st.sidebar.multiselect("Criticality", ["A", "B", "C"], default=["A", "B", "C"],
-                                  help="A = life-critical, B = important, C = lower priority")
-f_items = items[items.category.isin(cat_sel) & items.criticality.isin(crit_sel)]
-fsim = sim[sim.item_id.isin(f_items.item_id)]
-frec = rec[rec.item_id.isin(f_items.item_id)]
-st.sidebar.markdown(f"**{len(f_items)}** of {len(items)} items selected")
-st.sidebar.caption("Filters apply to the Plans compared, Items at risk and Reorder planner tabs. The Overview, Demand surge and What-if lab always use the whole hospital.")
+st.sidebar.markdown("## Controls")
+outcome_label = st.sidebar.radio("Outcome level", list(OUTCOMES), help="Suspected = clinical signs prompting review. Confirmed = deep/bloodstream or culture-positive.")
+OUT = OUTCOMES[outcome_label]
+case_sel = st.sidebar.multiselect("Case type", CASE_ORDER, default=CASE_ORDER)
+access_sel = st.sidebar.multiselect("Access route", ["Radial", "Femoral"], default=["Radial", "Femoral"])
+dmin, dmax = proc_all["procedure_date"].min().date(), proc_all["procedure_date"].max().date()
+dr = st.sidebar.date_input("Procedure dates", (dmin, dmax), min_value=dmin, max_value=dmax)
+d0, d1 = (dr if isinstance(dr, tuple) and len(dr) == 2 else (dmin, dmax))
+
+view = proc_all[
+    proc_all["case_type"].isin(case_sel) & proc_all["access_site"].isin(access_sel)
+    & (proc_all["procedure_date"].dt.date >= d0) & (proc_all["procedure_date"].dt.date <= d1)
+]
+st.sidebar.markdown(f"**{len(view):,}** of {len(proc_all):,} procedures selected")
+st.sidebar.caption("Filters apply to every tab except the STEMI vs elective comparison, which always uses all procedures so it matches the README.")
 
 # ------------------------------------------------------------------ header
-st.markdown('<div class="hero"><h1>🕋 Hajj Season Medical Supply Readiness</h1>'
-            "<p>Where does a supply plan built on a normal day break down when demand jumps to 5x?</p></div>", unsafe_allow_html=True)
-st.markdown('<div class="sim"><b>Fictional field hospital, simulated data.</b> A field hospital in Mina during Hajj 1447 / 2026. Every number is an assumption created to demonstrate the method. No real hospital, patient or supply data is used.</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="hero"><h1>🫀 Access-Site Infection After Cardiac Catheterisation</h1>'
+    "<p>STEMI vs elective PCI: infection rates, risk factors and the infection-control steps behind them</p></div>",
+    unsafe_allow_html=True,
+)
+st.markdown('<div class="sim"><b>Simulated data.</b> This dashboard uses no patient or hospital data. The dataset is built to resemble UK cardiac audit structure, and the extra risk for STEMI cases is an assumption. Results show how the analysis works, not what a real cath lab achieves.</div>', unsafe_allow_html=True)
 
-t1, t2, t3, t4, t5, t6, t7 = st.tabs(["🎯 Overview", "📈 Demand surge", "⚖️ Plans compared", "⚠️ Items at risk", "📦 Reorder planner", "🧪 What-if lab", "📚 Method & limits"])
+t1, t2, t3, t4, t5, t6, t7 = st.tabs([
+    "🎯 Overview", "⚖️ STEMI vs elective", "🧩 Risk factors", "🧼 Infection-control steps",
+    "📈 Control chart", "🦠 Infection events", "📚 Sources & method",
+])
 
 # ================================================================== TAB 1
 with t1:
-    base_total = items["normal_daily_use"].sum()
-    daily = cons.groupby("date")["quantity"].sum() / base_total
-    peak_idx, peak_day = daily.max(), daily.idxmax()
-    ba, sb = sim[sim.policy == A], sim[sim.policy == B]
-    so_a = ba[ba.unmet_demand > 0]
-    per_day_a = so_a.groupby("date").size()
-    worst_day, worst_n = per_day_a.idxmax(), int(per_day_a.max())
-    cols = st.columns(5)
-    kpi_card(cols[0], f"{peak_idx:.1f}x", "Peak hospital-wide demand", f"vs a normal day, on {day_label(peak_day)}")
-    kpi_card(cols[1], f"{mc.loc[A, 'fill_rate_mean'] * 100:.1f}%", "Demand met, baseline plan", f"mean of 200 runs · worst 5%: {mc.loc[A, 'fill_rate_p5'] * 100:.1f}%")
-    kpi_card(cols[2], f"{mc.loc[B, 'fill_rate_mean'] * 100:.2f}%", "Demand met, surge-aware plan", f"mean of 200 runs · worst 5%: {mc.loc[B, 'fill_rate_p5'] * 100:.2f}%")
-    kpi_card(cols[3], f"{mc.loc[A, 'stockout_item_days_mean']:.0f} → {mc.loc[B, 'stockout_item_days_mean']:.0f}", "Stockout item-days", "baseline → surge-aware (mean)")
-    kpi_card(cols[4], f"{mc.loc[A, 'critical_stockout_item_days_mean']:.0f} → {mc.loc[B, 'critical_stockout_item_days_mean']:.0f}", "Critical (class A) item-days", "baseline → surge-aware (mean)")
+    if view.empty:
+        st.info("No procedures match the filters.")
+    else:
+        n = len(view)
+        s = rate_row(view["suspected_infection_30d"].sum(), n)
+        c = rate_row(view["confirmed_infection_30d"].sum(), n)
+        cols = st.columns(5)
+        kpi(cols[0], f"{n:,}", "PCI procedures", f"{d0:%b %Y} to {d1:%b %Y}")
+        kpi(cols[1], f"{s['rate']:.1f}", "Suspected per 1,000", f"{s['events']} cases · 95% CI {s['lo']:.1f} to {s['hi']:.1f}")
+        kpi(cols[2], f"{c['rate']:.1f}", "Confirmed per 1,000", f"{c['events']} cases · 95% CI {c['lo']:.1f} to {c['hi']:.1f}")
+        kpi(cols[3], f"{(view['access_site'] == 'Radial').mean() * 100:.0f}%", "Radial access", "rest femoral")
+        kpi(cols[4], f"{view['skin_prep_complete'].mean() * 100:.1f}%", "Complete skin preparation", "process measure")
 
-    k = kpi.loc[A]
-    cover = rec["days_of_cover_at_peak_start"]
-    low = rec.sort_values("days_of_cover_at_peak_start").head(3)
+    # The project question, always answered on all procedures
+    a = proc_all
+    el, st_ = a[a.case_type == "Elective"], a[a.case_type == "STEMI"]
+    lines = []
+    for lab, col in OUTCOMES.items():
+        k1, k0 = st_[col].sum(), el[col].sum()
+        rr, lo, hi, p = rate_ratio(k1, len(st_), k0, len(el))
+        r1, r0 = rate_row(k1, len(st_)), rate_row(k0, len(el))
+        if p < 0.05:
+            verdict = "a statistically significant difference"
+        else:
+            verdict = f"<b>not</b> statistically significant (only {k1} vs {k0} events, so chance cannot be ruled out)"
+        lines.append(f"<b>{lab}:</b> STEMI {r1['rate']:.1f} vs elective {r0['rate']:.1f} per 1,000. Rate ratio {rr:.2f} (95% CI {lo:.2f} to {hi:.2f}), Fisher p = {p:.3f}, {verdict}.")
     st.markdown(
-        '<div class="answer"><h4>Where does a plan built on a normal day break down?</h4>'
-        f"<b>At the peak.</b> In the sample run, {int(k.items_with_a_stockout)} of {len(items)} items ran out at least once, including {int(k.critical_items_with_a_stockout)} of {(items.criticality == 'A').sum()} critical items. The first stockout was on {pd.Timestamp(k.first_stockout_date):%d %B}.<br>"
-        f"<b>The worst day is after the peak, not during it.</b> {worst_n} items were out of stock on {day_label(worst_day)}, because resupply takes 2 to 4 days and arrives after the surge has drained stock.<br>"
-        f"<b>Cover is thin when the peak starts.</b> At the end of 24 May, {int((cover < 2).sum())} of {len(rec)} items had less than 2 days of cover at peak demand. Lowest: "
-        + ", ".join(f"{r.item_name} ({r.days_of_cover_at_peak_start:.1f} days)" for r in low.itertuples()) + ".<br>"
-        '<span class="note">Surge-aware planning assumes the demand calendar is known in advance, so it is a best case. See the What-if lab for less accurate forecasts.</span></div>',
-        unsafe_allow_html=True)
+        '<div class="answer"><h4>The project question: do STEMI patients have a higher 30-day access-site infection rate than elective patients?</h4>'
+        + "<br>".join(lines)
+        + '<br><span class="note">Based on all procedures. This gap is partly built into the simulation (STEMI cases were given higher infection odds, more femoral access and less complete skin preparation), so it demonstrates the method, not a real finding.</span></div>',
+        unsafe_allow_html=True,
+    )
 
-    left, right = st.columns(2)
-    with left:
-        fig = go.Figure(go.Bar(x=date_labels, y=mult["multiplier"], marker_color=[RED if p else TEAL for p in PEAK],
-                               text=[f"{m:g}x" for m in mult["multiplier"]], textposition="outside", cliponaxis=False))
-        fig.update_layout(title="Assumed demand multiplier (x a normal day)", yaxis_title="x normal day")
-        st.plotly_chart(style(fig, 360, False), width="stretch")
-    with right:
-        d = pd.DataFrame({A: so_a.groupby("date").size(), B: sb[sb.unmet_demand > 0].groupby("date").size()}).reindex(mult["date"]).fillna(0)
-        fig = go.Figure()
-        for p in (A, B):
-            fig.add_trace(go.Scatter(x=date_labels, y=d[p], mode="lines+markers", name=p, line=dict(color=POLICY_COLOR[p], width=3)))
-        fig.update_layout(title="Items out of stock per day (sample run)", yaxis_title="Items")
-        st.plotly_chart(style(fig, 360), width="stretch")
+    if not view.empty:
+        left, right = st.columns(2)
+        with left:
+            df = rate_by(view, "case_type", OUT, CASE_ORDER)
+            fig = go.Figure()
+            fig = err_bar(fig, df, marker_color=[CASE_COLOR[g] for g in df["group"]], showlegend=False)
+            fig.update_layout(title=f"{outcome_label} per 1,000 procedures (exact 95% CI)", yaxis_title="Per 1,000")
+            st.plotly_chart(style(fig, 380, False), width="stretch")
+        with right:
+            vol = view.groupby(["month", "case_type"], observed=True).size().reset_index(name="n")
+            fig = go.Figure()
+            for ct in CASE_ORDER:
+                d = vol[vol.case_type == ct]
+                fig.add_trace(go.Bar(x=d["month"], y=d["n"], name=ct, marker_color=CASE_COLOR[ct]))
+            fig.update_layout(barmode="stack", title="Procedure volume by month", yaxis_title="Procedures")
+            st.plotly_chart(style(fig, 380), width="stretch")
 
 # ================================================================== TAB 2
 with t2:
-    st.markdown("#### The demand surge")
-    daily_idx = (cons.groupby("date")["quantity"].sum() / items["normal_daily_use"].sum()).reindex(mult["date"])
+    st.markdown("#### STEMI vs elective PCI (all procedures)")
+    rows = []
+    for lab, g in [("Elective", el), ("NSTEMI", a[a.case_type == "NSTEMI"]), ("STEMI", st_), ("All procedures", a)]:
+        sr, cr = rate_row(g["suspected_infection_30d"].sum(), len(g)), rate_row(g["confirmed_infection_30d"].sum(), len(g))
+        rows.append({"Group": lab, "Procedures": len(g), "Suspected cases": sr["events"], "Suspected per 1,000 (95% CI)": fmt_rate(sr),
+                     "Confirmed cases": cr["events"], "Confirmed per 1,000 (95% CI)": fmt_rate(cr)})
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+
     left, right = st.columns([3, 2])
     with left:
         fig = go.Figure()
-        fig.add_trace(go.Bar(x=date_labels, y=mult["multiplier"], name="Assumed multiplier", marker_color="#1F3A5A"))
-        fig.add_trace(go.Scatter(x=date_labels, y=daily_idx.values, name="Hospital-wide demand index (simulated)", mode="lines+markers", line=dict(color=AMBER, width=3)))
-        fig.update_layout(title="Assumed multiplier vs simulated hospital-wide demand", yaxis_title="x normal day", barmode="overlay")
+        for lab, col, colr in [("Suspected", "suspected_infection_30d", BLUE), ("Confirmed", "confirmed_infection_30d", RED)]:
+            d = rate_by(a, "case_type", col, CASE_ORDER)
+            fig = err_bar(fig, d, name=lab, marker_color=colr)
+        fig.update_layout(barmode="group", title="Rate per 1,000 by case type (exact 95% CI)", yaxis_title="Per 1,000")
         st.plotly_chart(style(fig, 400), width="stretch")
     with right:
-        cal = mult.assign(date=mult["date"].dt.strftime("%d %b"))[["date", "hijri_day", "phase", "multiplier"]]
-        cal.columns = ["Date", "Hijri day", "Phase", "Multiplier"]
-        st.dataframe(cal, hide_index=True, width="stretch", height=400)
-    st.info("Hospital-wide demand peaks at about 4.4x a normal day, not 5x, because departments respond differently to the surge. A Cath Lab barely feels it (sensitivity 0.4) while Emergency feels all of it (1.0).")
+        st.markdown("**STEMI vs elective (Fisher's exact test)**")
+        for lab, col in OUTCOMES.items():
+            k1, k0 = st_[col].sum(), el[col].sum()
+            rr, lo, hi, p = rate_ratio(k1, len(st_), k0, len(el))
+            badge = "🟢 significant" if p < 0.05 else "⚪ not significant"
+            st.markdown(f"**{lab}**: rate ratio **{rr:.2f}** (95% CI {lo:.2f} to {hi:.2f}), p = {p:.3f} · {badge}  \n<span class='note'>{k1} events in {len(st_)} STEMI vs {k0} in {len(el)} elective</span>", unsafe_allow_html=True)
+        st.markdown("<span class='note'>With so few events, wide confidence intervals are expected. A p-value above 0.05 means the data cannot separate the difference from chance, not that there is no difference.</span>", unsafe_allow_html=True)
 
-    pre = cons[cons.date < "2026-05-20"].groupby("department")["quantity"].sum() / 5
-    dd = cons.groupby(["department", "date"])["quantity"].sum().unstack()
-    heat = dd.div(pre, axis=0).loc[dept.sort_values("surge_sensitivity", ascending=False).department]
-    fig = go.Figure(go.Heatmap(z=heat.values, x=date_labels, y=heat.index, colorscale="YlOrRd", text=np.round(heat.values, 1), texttemplate="%{text}", colorbar=dict(title="x normal")))
-    fig.update_layout(title="Demand by department, relative to its first five days (normal operation)")
-    st.plotly_chart(style(fig, 400, False), width="stretch")
+    st.markdown("#### Why the groups differ: case mix and process")
+    mix = a.groupby("case_type", observed=True).agg(
+        Procedures=("procedure_id", "count"),
+        **{"Femoral access %": ("access_site", lambda x: (x == "Femoral").mean() * 100)},
+        **{"Skin prep incomplete %": ("skin_prep_complete", lambda x: (x == 0).mean() * 100)},
+        **{"Out of hours %": ("out_of_hours", lambda x: x.mean() * 100)},
+        **{"Mechanical support %": ("mechanical_support", lambda x: x.mean() * 100)},
+        **{"Diabetes %": ("diabetes", lambda x: x.mean() * 100)},
+        **{"Mean age": ("age", "mean")},
+    ).reindex(CASE_ORDER).round(1)
+    st.dataframe(mix, width="stretch")
+    st.caption("STEMI cases use femoral access more, skip complete skin preparation more often and run out of hours more. These differences are part of why their infection rate is higher in this simulation.")
 
 # ================================================================== TAB 3
 with t3:
-    st.markdown("#### Baseline vs surge-aware planning")
-    st.caption("Both policies start with the same stock (12 normal days) and face the same resupply lead times. Only the reorder rules differ.")
-    if fsim.empty:
-        st.warning("No items match the filters.")
+    st.markdown(f"#### {outcome_label} by risk factor (per 1,000, exact 95% CI)")
+    if view.empty:
+        st.info("No procedures match the filters.")
     else:
-        cols = st.columns(2)
-        for col, p in zip(cols, (A, B)):
-            g = fsim[fsim.policy == p]
-            so = g[g.unmet_demand > 0]
-            kpi_card(col, f"{(1 - g.unmet_demand.sum() / g.demand.sum()) * 100:.2f}%", p, f"{len(so)} stockout item-days · {so.item_id.nunique()} items out at least once (sample run)")
-        st.markdown("&nbsp;")
-        left, right = st.columns(2)
-        with left:
-            fig = go.Figure()
-            for crit in ["A", "B", "C"]:
-                g = fsim[(fsim.policy == A) & (fsim.unmet_demand > 0) & (fsim.criticality == crit)].groupby("date").size().reindex(mult["date"]).fillna(0)
-                fig.add_trace(go.Bar(x=date_labels, y=g.values, name=f"Class {crit}", marker_color=CRIT_COLOR[crit]))
-            fig.update_layout(barmode="stack", title="Baseline planning: items out of stock per day, by criticality", yaxis_title="Items")
-            st.plotly_chart(style(fig, 380), width="stretch")
-        with right:
-            fr = fsim.groupby(["category", "policy"]).apply(lambda g: (1 - g.unmet_demand.sum() / g.demand.sum()) * 100, include_groups=False).unstack()
-            fig = go.Figure()
-            for p in (A, B):
-                fig.add_trace(go.Bar(x=fr.index, y=fr[p], name=p, marker_color=POLICY_COLOR[p], text=[f"{v:.1f}%" for v in fr[p]], textposition="outside"))
-            fig.update_layout(barmode="group", title="Demand met by category (sample run)", yaxis=dict(range=[80, 101], title="Fill rate (%)"))
-            st.plotly_chart(style(fig, 380), width="stretch")
-        st.markdown("##### Stability across 200 simulated seasons (whole hospital)")
-        mc_show = mc.rename(columns={"fill_rate_mean": "Demand met (mean)", "fill_rate_p5": "Demand met (worst 5%)", "stockout_item_days_mean": "Stockout item-days (mean)", "critical_stockout_item_days_mean": "Critical item-days (mean)"})
-        mc_show[["Demand met (mean)", "Demand met (worst 5%)"]] = (mc_show[["Demand met (mean)", "Demand met (worst 5%)"]] * 100).round(2).astype(str) + "%"
-        st.dataframe(mc_show.reindex([A, B]), width="stretch")
-        st.caption("The gap between the two plans holds in every simulated season: even the worst 5% of surge-aware seasons beat the average baseline season.")
+        d = view
+        defs = [
+            ("Skin preparation", [("Complete", d.skin_prep_complete == 1), ("Incomplete", d.skin_prep_complete == 0)]),
+            ("Access route", [("Radial", d.access_site == "Radial"), ("Femoral", d.access_site == "Femoral")]),
+            ("Haemostasis", [("Radial band", d.haemostasis_method == "Radial band"), ("Closure device", d.haemostasis_method == "Closure device"), ("Manual compression", d.haemostasis_method == "Manual compression")]),
+            ("Timing", [("In hours", d.out_of_hours == 0), ("Out of hours", d.out_of_hours == 1)]),
+            ("Diabetes", [("No", d.diabetes == 0), ("Yes", d.diabetes == 1)]),
+            ("Mechanical support", [("No", d.mechanical_support == 0), ("Yes", d.mechanical_support == 1)]),
+            ("BMI", [("Under 35", d.bmi < 35), ("35 or more", d.bmi >= 35)]),
+            ("Age", [("Under 75", d.age < 75), ("75 or more", d.age >= 75)]),
+            ("Kidney disease", [("No", d.ckd == 0), ("Yes", d.ckd == 1)]),
+        ]
+        rows = []
+        for factor, levels in defs:
+            for lvl, m in levels:
+                g = d[m]
+                if len(g):
+                    rows.append({"Factor": factor, "Level": lvl, **rate_row(g[OUT].sum(), len(g))})
+        rf = pd.DataFrame(rows)
+        rf["label"] = rf["Factor"] + ": " + rf["Level"]
+        rf = rf.iloc[::-1]
+        thin = rf["events"] < 5
+        fig = go.Figure(go.Scatter(
+            x=rf["rate"], y=rf["label"], mode="markers",
+            marker=dict(size=11, color=np.where(thin, GREY, BLUE), line=dict(width=1, color="#fff")),
+            error_x=dict(type="data", symmetric=False, array=rf["hi"] - rf["rate"], arrayminus=rf["rate"] - rf["lo"], color="#8DA3BA", thickness=1.6),
+            customdata=np.c_[rf["events"], rf["n"]],
+            hovertemplate="%{y}<br>%{x:.1f} per 1,000<br>%{customdata[0]} events in %{customdata[1]} procedures<extra></extra>"))
+        fig.update_layout(xaxis_title="Per 1,000 procedures", title="Grey dots: fewer than 5 events, so the estimate is very imprecise")
+        st.plotly_chart(style(fig, 560, False), width="stretch")
+        show = rf.iloc[::-1][["Factor", "Level", "n", "events", "rate", "lo", "hi"]].rename(columns={"n": "Procedures", "events": "Events", "rate": "Per 1,000", "lo": "CI low", "hi": "CI high"})
+        with st.expander("Show the table"):
+            st.dataframe(show.round(1), hide_index=True, width="stretch")
+        st.caption("Femoral groups have higher rates than radial, and incomplete skin preparation has a higher rate than complete preparation. Intervals overlap for out-of-hours and diabetes, so those differences are small. These patterns partly reflect the assumptions used to create the data.")
+
+        with st.expander("Operators and cath lab rooms (interpret with caution)"):
+            c1, c2 = st.columns(2)
+            for col, grp, title in [(c1, "operator_id", "By operator"), (c2, "lab_room", "By cath lab room")]:
+                dd = rate_by(view, grp, OUT)
+                fig = go.Figure()
+                fig = err_bar(fig, dd, marker_color=BLUE, showlegend=False)
+                fig.update_layout(title=title, yaxis_title="Per 1,000")
+                col.plotly_chart(style(fig, 320, False), width="stretch")
+            st.info("Operator and room comparisons are not reliable at this event count. Intervals are wide and overlap. They are shown for completeness, not for ranking people.")
 
 # ================================================================== TAB 4
 with t4:
-    st.markdown("#### Items at risk when the peak starts")
-    if frec.empty:
-        st.warning("No items match the filters.")
+    st.markdown("#### The infection-control steps, one at a time")
+    st.caption("Each step is a thing the team controls. The cards show how often the step is completed and the infection rate when it is done or missed.")
+    if view.empty:
+        st.info("No procedures match the filters.")
     else:
-        thin = frec[frec.days_of_cover_at_peak_start < 2]
+        d = view
+        steps = [
+            ("1. Complete skin preparation", d.skin_prep_complete == 1, "Done", "Missed"),
+            ("2. Radial access chosen", d.access_site == "Radial", "Radial", "Femoral"),
+            ("3. Sheath out within 2 hours", d.sheath_dwell_hours <= 2, "Within 2 h", "Over 2 h"),
+        ]
         cols = st.columns(3)
-        kpi_card(cols[0], f"{len(thin)} of {len(frec)}", "Items with under 2 days of cover", "stock at end of 24 May vs 25 May demand")
-        kpi_card(cols[1], f"{(thin.criticality == 'A').sum()}", "Of those, critical (class A)", "")
-        lowest = frec.sort_values("days_of_cover_at_peak_start").iloc[0]
-        kpi_card(cols[2], f"{lowest.days_of_cover_at_peak_start:.1f} days", f"Lowest cover: {lowest.item_name}", "")
-        top = frec.sort_values("days_of_cover_at_peak_start").head(15).iloc[::-1]
-        fig = go.Figure(go.Bar(x=top.days_of_cover_at_peak_start, y=top.item_name, orientation="h", marker_color=[CRIT_COLOR[c] for c in top.criticality],
-                               text=[f"{v:.1f}" for v in top.days_of_cover_at_peak_start], textposition="outside", cliponaxis=False))
-        fig.add_vline(x=2, line=dict(color="#fff", dash="dash"), annotation_text="2 days", annotation_position="top")
-        fig.update_layout(title="Days of cover at the start of the peak (red = class A, amber = B, grey = C)", xaxis_title="Days")
-        st.plotly_chart(style(fig, 520, False), width="stretch")
+        for col, (title, mask, yes, no) in zip(cols, steps):
+            ry, rn = rate_row(d.loc[mask, OUT].sum(), mask.sum()), rate_row(d.loc[~mask, OUT].sum(), (~mask).sum())
+            comp = mask.mean() * 100
+            sub = (f"{yes}: {ry['rate']:.1f} per 1,000 ({ry['events']} cases)<br>{no}: "
+                   + (f"{rn['rate']:.1f} per 1,000 ({rn['events']} cases)" if rn["n"] else "no procedures"))
+            kpi(col, f"{comp:.1f}%", title, sub)
 
-        st.markdown("##### Follow one item through the season")
-        pick = st.selectbox("Item", frec.sort_values("days_of_cover_at_peak_start").item_name.tolist())
-        iid = items.loc[items.item_name == pick, "item_id"].iloc[0]
-        g = sim[sim.item_id == iid]
-        fig = go.Figure()
-        d0 = g[g.policy == A]
-        fig.add_trace(go.Bar(x=date_labels, y=d0.demand, name="Demand", marker_color="#1F3A5A"))
-        for p in (A, B):
-            gp = g[g.policy == p]
-            fig.add_trace(go.Scatter(x=date_labels, y=gp.closing_stock, name=f"Closing stock, {p}", mode="lines+markers", line=dict(color=POLICY_COLOR[p], width=3)))
-        fig.update_layout(title=f"{pick}: demand and closing stock (sample run)", yaxis_title="Units")
-        st.plotly_chart(style(fig, 400), width="stretch")
-        un = int(d0.unmet_demand.sum())
-        st.caption(f"Under baseline planning {pick} had {un} units of unmet demand this season." if un else f"Under baseline planning {pick} never ran out in this sample run.")
+        st.markdown("&nbsp;")
+        left, right = st.columns(2)
+        with left:
+            comp = d.groupby("case_type", observed=True).agg(
+                **{"Skin prep complete": ("skin_prep_complete", "mean")},
+                **{"Radial access": ("access_site", lambda x: (x == "Radial").mean())},
+                **{"Sheath out within 2 h": ("sheath_dwell_hours", lambda x: (x <= 2).mean())},
+            ).reindex([c for c in CASE_ORDER if c in d.case_type.unique()]) * 100
+            fig = go.Figure(go.Heatmap(z=comp.values, x=comp.columns, y=comp.index, colorscale="Blues", zmin=60, zmax=100,
+                                       text=np.round(comp.values, 1), texttemplate="%{text}%", showscale=False))
+            fig.update_layout(title="Step completion by case type")
+            st.plotly_chart(style(fig, 330, False), width="stretch")
+        with right:
+            prep = d.groupby(["case_type", "timing"], observed=True)["skin_prep_complete"].mean().mul(100).unstack()
+            prep = prep.reindex([c for c in CASE_ORDER if c in prep.index])
+            fig = go.Figure(go.Heatmap(z=prep.values, x=prep.columns, y=prep.index, colorscale="Blues", zmin=60, zmax=100,
+                                       text=np.round(prep.values, 1), texttemplate="%{text}%", showscale=False))
+            fig.update_layout(title="Skin preparation completion: case type by timing")
+            st.plotly_chart(style(fig, 330, False), width="stretch")
+        st.info("Where the gap is: complete skin preparation is lowest in STEMI cases, the most time-critical group, and dips for out-of-hours NSTEMI cases. Elective cases all run in hours, so their cell is empty. A checklist or a ready prep-pack at the lab door would help most in the urgent pathway.")
+
+        st.markdown("##### Femoral haemostasis")
+        fem = d[d.access_site == "Femoral"]
+        if len(fem):
+            hm = rate_by(fem, "haemostasis_method", OUT)
+            fig = go.Figure()
+            fig = err_bar(fig, hm, marker_color=BLUE, showlegend=False)
+            fig.update_layout(title="Femoral cases: closure device vs manual compression", yaxis_title="Per 1,000")
+            st.plotly_chart(style(fig, 320, False), width="stretch")
+        st.caption("Associations in simulated data. The size of each gap follows the assumptions in generate_data.py, so treat them as a demonstration of how to monitor a bundle, not as proof that a step works.")
 
 # ================================================================== TAB 5
 with t5:
-    st.markdown("#### Reorder levels for the peak window")
-    if frec.empty:
-        st.warning("No items match the filters.")
+    st.markdown(f"#### Monthly {outcome_label.lower()} rate (p-chart)")
+    if view.empty:
+        st.info("No procedures match the filters.")
     else:
-        r = frec.assign(multiple=lambda d: d.recommended_reorder_level_for_peak / d.baseline_reorder_level)
-        cols = st.columns(3)
-        kpi_card(cols[0], f"{r.multiple.median():.1f}x", "Median increase in reorder level", "recommended vs baseline")
-        kpi_card(cols[1], f"{r.multiple.max():.1f}x", "Largest increase", r.sort_values("multiple").iloc[-1].item_name)
-        kpi_card(cols[2], f"{len(r)}", "Items shown", "")
-        st.markdown("&nbsp;")
-        view = r.sort_values("days_of_cover_at_peak_start")[["item_name", "category", "criticality", "lead_time_days", "normal_daily_use", "peak_daily_demand",
-                                                            "baseline_reorder_level", "recommended_reorder_level_for_peak", "multiple", "days_of_cover_at_peak_start"]]
-        view.columns = ["Item", "Category", "Class", "Lead time (days)", "Normal daily use", "Peak daily demand", "Baseline reorder level", "Recommended for peak", "Increase (x)", "Days of cover at peak start"]
-        st.dataframe(view, hide_index=True, width="stretch", height=480, column_config={
-            "Increase (x)": st.column_config.NumberColumn(format="%.1f x"),
-            "Days of cover at peak start": st.column_config.ProgressColumn(format="%.1f", min_value=0, max_value=6),
-        })
-        st.download_button("⬇️ Download these recommendations (CSV)", view.to_csv(index=False).encode(), "reorder_recommendations_filtered.csv", "text/csv")
-        st.caption("Recommended level = the highest demand expected over the lead time plus 2 days, so an order placed at that level still covers the peak window.")
+        mth = view.groupby("month").agg(n=("procedure_id", "count"), k=(OUT, "sum")).reset_index()
+        pbar = mth.k.sum() / mth.n.sum()
+        mth["rate"] = mth.k / mth.n * 1000
+        mth["ucl"] = (pbar + 3 * np.sqrt(pbar * (1 - pbar) / mth.n)) * 1000
+        mth["lcl"] = ((pbar - 3 * np.sqrt(pbar * (1 - pbar) / mth.n)) * 1000).clip(lower=0)
+        mth["ma3"] = mth.k.rolling(3).sum() / mth.n.rolling(3).sum() * 1000
+        out_pts = mth[mth.rate > mth.ucl]
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=mth.month, y=mth.ucl, mode="lines", name="Upper control limit (3 sigma)", line=dict(color=RED, dash="dash", shape="hv")))
+        fig.add_trace(go.Scatter(x=mth.month, y=mth.lcl, mode="lines", name="Lower control limit", line=dict(color=GREY, dash="dot", shape="hv")))
+        fig.add_hline(y=pbar * 1000, line=dict(color=GREY, width=1), annotation_text=f"Centre line {pbar * 1000:.1f}", annotation_position="bottom right")
+        fig.add_trace(go.Scatter(x=mth.month, y=mth.rate, mode="lines+markers", name="Monthly rate", line=dict(color=BLUE, width=2.5), marker=dict(size=8)))
+        fig.add_trace(go.Scatter(x=mth.month, y=mth.ma3, mode="lines", name="3-month moving rate", line=dict(color=AMBER, width=2)))
+        if len(out_pts):
+            fig.add_trace(go.Scatter(x=out_pts.month, y=out_pts.rate, mode="markers", name="Above upper limit", marker=dict(size=13, color=RED, symbol="diamond")))
+        fig.update_layout(yaxis_title="Per 1,000 procedures", xaxis_title="Procedure month")
+        st.plotly_chart(style(fig, 460), width="stretch")
+        if len(out_pts):
+            st.error(f"{len(out_pts)} month(s) crossed the upper control limit: " + ", ".join(out_pts.month.dt.strftime("%b %Y")) + ". In a real unit this would trigger a review.")
+        else:
+            st.success("No month crossed the upper control limit, so the monthly rate looks stable across the selected period.")
+        st.caption("Events are rare, so single months jump around. The control limits show how much month-to-month movement is just chance.")
+        with st.expander("Show the monthly numbers"):
+            st.dataframe(mth.assign(month=mth.month.dt.strftime("%b %Y"))[["month", "n", "k", "rate", "ucl"]].rename(columns={"n": "Procedures", "k": "Cases", "rate": "Per 1,000", "ucl": "Upper limit"}).round(1), hide_index=True, width="stretch")
 
 # ================================================================== TAB 6
 with t6:
-    st.markdown("#### What-if lab: stress-test the assumptions")
-    st.caption("Change the assumptions and the dashboard re-runs the simulation across many random seasons. With the default values it reproduces the 200-run results.")
-    c1, c2, c3 = st.columns(3)
-    peak = c1.slider("Peak-day demand (x normal)", 2.0, 8.0, 5.0, 0.5, help="Applies to 8, 10 and 11 Dhul Hijjah")
-    extra = c2.slider("Extra supplier delay (days)", 0, 3, 0, help="Added to every item's lead time")
-    opening = c3.slider("Opening stock (normal days)", 6, 20, 12)
-    c4, c5 = st.columns(2)
-    acc = c4.slider("Forecast accuracy of the surge-aware plan", 0.4, 1.0, 1.0, 0.05, help="100% = the plan knows the exact demand calendar. Lower = it underestimates the surge.")
-    runs = c5.select_slider("Simulated seasons", [20, 50, 100, 200], value=100)
-    with st.spinner("Simulating..."):
-        res = what_if(items, dept, mult, peak=peak, extra_lead=extra, open_days=float(opening), accuracy=acc, runs=runs)
-    cols = st.columns(4)
-    kpi_card(cols[0], f"{res['A']['fill_mean'] * 100:.1f}%", "Demand met, baseline", f"original: {mc.loc[A, 'fill_rate_mean'] * 100:.1f}%")
-    kpi_card(cols[1], f"{res['B']['fill_mean'] * 100:.2f}%", "Demand met, surge-aware", f"original: {mc.loc[B, 'fill_rate_mean'] * 100:.2f}%")
-    kpi_card(cols[2], f"{res['A']['so_mean']:.0f} → {res['B']['so_mean']:.0f}", "Stockout item-days", f"original: {mc.loc[A, 'stockout_item_days_mean']:.0f} → {mc.loc[B, 'stockout_item_days_mean']:.0f}")
-    kpi_card(cols[3], f"{res['A']['so_crit_mean']:.0f} → {res['B']['so_crit_mean']:.0f}", "Critical item-days", f"original: {mc.loc[A, 'critical_stockout_item_days_mean']:.0f} → {mc.loc[B, 'critical_stockout_item_days_mean']:.0f}")
-    st.markdown("&nbsp;")
-    left, right = st.columns(2)
-    with left:
-        fig = go.Figure()
-        for p, key in ((A, "A"), (B, "B")):
-            fig.add_trace(go.Scatter(x=date_labels, y=res[key]["per_day"], name=p, mode="lines+markers", line=dict(color=POLICY_COLOR[p], width=3)))
-        fig.update_layout(title="Average items out of stock per day", yaxis_title="Items")
-        st.plotly_chart(style(fig, 380), width="stretch")
-    with right:
-        un = pd.Series(res["A"]["item_unmet"], index=items.item_name).sort_values().tail(10)
-        fig = go.Figure(go.Bar(x=un.values, y=un.index, orientation="h", marker_color=RED))
-        fig.update_layout(title="Most exposed items, baseline (avg units unmet)", xaxis_title="Units")
-        st.plotly_chart(style(fig, 380, False), width="stretch")
-    if acc < 1:
-        st.warning(f"At {acc:.0%} forecast accuracy the surge-aware plan underestimates the surge, so part of its advantage disappears. The real value of this approach depends on how good the demand forecast is.")
-    st.caption("Department sensitivities, the other days' multipliers and item data are unchanged from the original model.")
+    ev = events_all.merge(view[["procedure_id", "case_type", "access_site"]], on="procedure_id", how="inner")
+    st.markdown("#### What happened in the suspected infections")
+    if ev.empty:
+        st.info("No infection events in the selected procedures.")
+    else:
+        cols = st.columns(4)
+        kpi(cols[0], f"{len(ev)}", "Suspected infections", "events in the selection")
+        kpi(cols[1], f"{ev.confirmed.mean() * 100:.0f}%", "Confirmed", f"{int(ev.confirmed.sum())} of {len(ev)}")
+        kpi(cols[2], f"{ev.readmitted.mean() * 100:.0f}%", "Readmitted", f"{int(ev.readmitted.sum())} patients")
+        kpi(cols[3], f"{ev.days_to_onset.median():.0f} days", "Median time to onset", f"range {ev.days_to_onset.min()} to {ev.days_to_onset.max()} days")
+        st.markdown("&nbsp;")
+        c1, c2 = st.columns(2)
+        sev = ev.severity.value_counts().reindex(["Superficial", "Deep", "Bloodstream"]).dropna()
+        fig = go.Figure(go.Bar(x=sev.index, y=sev.values, marker_color=[LIGHT, AMBER, RED][: len(sev)], text=sev.values, textposition="outside"))
+        fig.update_layout(title="Severity", yaxis_title="Cases")
+        c1.plotly_chart(style(fig, 330, False), width="stretch")
+        org = ev.organism.value_counts().sort_values()
+        fig = go.Figure(go.Bar(x=org.values, y=org.index, orientation="h", marker_color=BLUE, text=org.values, textposition="outside"))
+        fig.update_layout(title="Organism or culture result", xaxis_title="Cases")
+        c2.plotly_chart(style(fig, 330, False), width="stretch")
+        c3, c4 = st.columns(2)
+        bucket = pd.cut(ev.days_to_onset, [0, 7, 14, 30], labels=["Days 1 to 7", "Days 8 to 14", "Days 15 to 30"]).value_counts().sort_index()
+        fig = go.Figure(go.Bar(x=bucket.index.astype(str), y=bucket.values, marker_color=BLUE, text=bucket.values, textposition="outside"))
+        fig.update_layout(title="Time to onset after the procedure", yaxis_title="Cases")
+        c3.plotly_chart(style(fig, 330, False), width="stretch")
+        tr = ev.treatment.value_counts().sort_values()
+        fig = go.Figure(go.Bar(x=tr.values, y=tr.index, orientation="h", marker_color=LIGHT, text=tr.values, textposition="outside"))
+        fig.update_layout(title="Treatment", xaxis_title="Cases")
+        c4.plotly_chart(style(fig, 330, False), width="stretch")
+        st.caption("Only a few dozen events, so these breakdowns show how the analysis works. They are not stable estimates.")
 
 # ================================================================== TAB 7
 with t7:
-    st.markdown("#### The scenario")
-    st.markdown("A fictional field hospital in Mina during the Hajj 1447 / 2026 season, inspired by hands-on experience with medical supplies during Hajj.\n\n"
-                "- **9 departments:** Emergency, Trauma ICU, Burn Unit, ICU, Inpatient Wards, Pharmacy, Laboratory, Radiology, Cath Lab\n"
-                "- **80 generic items** (50 medical supplies, 20 pharmaceuticals, 10 laboratory), each with a criticality class (A, B, C), supply channel and lead time\n"
-                "- **Operating period:** 15 to 31 May 2026 (17 days)\n"
-                "- **Peak days:** 8, 10 and 11 Dhul Hijjah (25, 27, 28 May) assumed at **5x** a normal pre-season day")
-    st.markdown("#### Method")
-    st.markdown("1. **Generate demand:** daily consumption per department and item (Poisson), scaled by the demand calendar and each department's sensitivity.\n"
-                "2. **Simulate stock** under two policies with the same opening stock (12 normal days) and the same lead times (2 to 4 days):\n"
-                "   - **Baseline planning:** reorder level = normal daily use × (lead time + 3 days), order up to normal daily use × (lead time + 10 days).\n"
-                "   - **Surge-aware planning:** the same rules, but never lower than the expected demand over the next lead time + 2 days (reorder) or + 8 days (order-up-to).\n"
-                "3. **Repeat 200 times** (Monte Carlo) to check the result is stable.\n"
-                "4. **Recommend** reorder levels for the peak window.")
-    st.markdown("#### Department sensitivity to the surge")
-    st.dataframe(dept.rename(columns={"department": "Department", "surge_sensitivity": "Surge sensitivity (1.0 = full multiplier)"}), hide_index=True, width="stretch")
+    st.markdown("#### About this project")
+    st.markdown(
+        "**Question.** Do patients treated with primary PCI for STEMI have a higher rate of access-site infection within 30 days than patients treated electively, and which factors (access route, haemostasis method, skin preparation, mechanical support) are linked to infection?\n\n"
+        "**Why.** I am a cath lab head nurse. Access-site infection is rare after cardiac catheterisation but serious when it happens, and infection-control teams track it per 1,000 procedures. Because events are rare, the dashboard reports exact confidence intervals and avoids claiming differences the data cannot support."
+    )
+    st.markdown("**Outcome levels.** *Suspected*: clinical signs at the access site that prompt review. *Confirmed*: a deep or bloodstream infection, or a culture-positive infection.")
+    st.markdown("#### Data sources behind the simulated numbers")
+    src = pd.DataFrame([
+        ["Radial access share", "About 89% (2019/20)", "[NAPCI 2021 Summary Report (NICOR)](https://www.hqip.org.uk/wp-content/uploads/2026/03/NAPCI-Domain-Report_2021_FINAL.pdf)"],
+        ["Radial use and ACS share of PCI", "About 94% radial, 70% ACS (2022/23)", "[BCIS national audit, reported by TCTMD](https://www.tctmd.com/news/uk-cardiac-audit-reveals-some-good-some-appalling-trends-pci)"],
+        ["Case mix", "Roughly 38%, 32%, 30%", "[NICOR PCI Hospital Report, Norfolk and Norwich, 2015 to 2018](https://www.nnuh.nhs.uk/wp-content/uploads/2022/07/NICOR-outcome-data.pdf)"],
+        ["Femoral groin infection", "About 0.2% manual, 0.6% closure device", "[Meta-analysis, Am Heart J 2010;159:518-531](https://cardiovascularbusiness.com/node/1602)"],
+        ["Infection after closure devices", "Reported range 0% to 5.1%", "[Malekpour and Castillo, HMP Global](https://www.hmpgloballearningnetwork.com/site/vdm/content/infection-perilous-complication-closure-device)"],
+        ["Femoral vs radial arterial catheters (ICU)", "Femoral about 4 times radial", "[Lorente et al., Critical Care 2006](https://link.springer.com/doi/10.1186/cc4930)"],
+    ], columns=["Item", "Value used", "Source"])
+    md = "| Item | Value used | Source |\n|---|---|---|\n" + "\n".join(f"| {a} | {b} | {c} |" for a, b, c in src.values.tolist())
+    st.markdown(md)
+    st.markdown("#### Assumptions (not published effect sizes)")
+    st.dataframe(pd.DataFrame({
+        "Factor": ["STEMI", "NSTEMI", "Diabetes", "BMI 35 or more", "Mechanical support", "Incomplete skin preparation", "Age 75 or more", "Suspected vs confirmed"],
+        "Odds multiplier": ["1.5", "1.25", "1.6", "1.5", "2.0", "1.8", "1.2", "Suspected about 2.5 times more frequent"],
+    }), hide_index=True, width="stretch")
+    st.markdown("#### Methods")
+    st.markdown("- Rates are per 1,000 procedures with **exact (Clopper-Pearson) 95% confidence intervals**.\n- STEMI vs elective uses a **rate ratio with a log-method 95% CI** and **Fisher's exact test**.\n- The monthly chart is a **p-chart** with 3-sigma limits around the overall rate.\n- Full analysis code: `analysis.py`. SQL queries: `sql/queries.sql`.")
     st.markdown("#### Limitations")
-    st.markdown("- **Results follow from the assumptions.** Surge size, department sensitivities, opening stock and lead times are illustrative. Real figures would change the numbers, not the method.\n"
-                "- **Surge-aware planning assumes the demand calendar is known in advance**, so it is a best case. A real forecast would be less accurate (try the What-if lab).\n"
-                "- Supplier stock is assumed unlimited, and each item is tracked at hospital level in one central store.\n"
-                "- Arafah day (26 May) is assumed at 2.0x and the ramp-up and wind-down shapes are illustrative. Edit `demand_multipliers.xlsx` or `generate_data.py` to test other patterns.")
-    st.markdown("---\n**Yosra El Nagar**, Cath Lab Head Nurse moving into Healthcare Data Analytics · [LinkedIn](https://www.linkedin.com/in/yosra-nagar-9a6862118/) · [GitHub](https://github.com/yosras-dotcomAi/hajj-supply-readiness)")
+    st.markdown("Only 22 suspected and 10 confirmed events, so subgroup estimates are very imprecise and operator comparisons are not reliable. A real evaluation would need approved hospital data, case definitions from national surveillance criteria, and adjustment for confounders.")
+    st.markdown("---\n**Yosra El Nagar**, Cath Lab Head Nurse moving into Healthcare Data Analytics · [LinkedIn](https://www.linkedin.com/in/yosra-nagar-9a6862118/) · [GitHub](https://github.com/yosras-dotcomAi/cath-lab-access-site-infection)")
